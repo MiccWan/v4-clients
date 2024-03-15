@@ -21,7 +21,12 @@ export default class RestClient {
       params: {} = {},
     ): Promise<Data> {
       const url = `${this.host}${generateQueryPath(requestPath, params)}`;
-      const response = await request(url);
+      /**
+       * Bun v1.0.31 has a bug where is cannot handle 'br' encoding correctly
+       * We have to manually patch the request to remove 'br' from the 'Accept-Encoding' header
+       * @see https://github.com/oven-sh/bun/issues/267
+       */
+      const response = await request(url, RequestMethod.GET, null, { 'Accept-Encoding': 'gzip deflate' });
       return response.data;
     }
 
