@@ -71,15 +71,16 @@ async function maintainMain() {
 }
 
 function main() {
-  log(`Start monitoring for subaccounts ${TradingSubIds}`);
-  setInterval(() => {
-    log(`Start checking...`);
-    maintainMain().catch(console.error);
+  log(`Start checking...`);
+  maintainMain().catch(console.error);
 
-    for (const toId of TradingSubIds) {
-      maintainTradingSub(toId).catch(console.error);
-    }
-  }, 30 * 1000);
+  for (const toId of TradingSubIds) {
+    maintainTradingSub(toId).catch(console.error);
+  }
 }
 
+log(`Start monitoring for subaccounts ${TradingSubIds}`);
 main();
+setInterval(() => {
+  main();
+}, 30 * 1000);
