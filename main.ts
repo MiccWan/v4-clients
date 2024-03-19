@@ -1,14 +1,16 @@
 import 'dotenv/config';
+import fs from 'fs';
 import Long from 'long';
 import { SubaccountClient } from './src';
 import { CompositeClient } from './src/clients/composite-client';
 import { Network, BECH32_PREFIX, } from './src/clients/constants';
 import LocalWallet from './src/clients/modules/local-wallet';
 
-const Address = process.env.ADDRESS;
-const Mnemonic = process.env.MNEMONIC;
-const FromSubaccountId = 1;
-const TradingSubIds = [20, 21];
+const ConfigPath = process.env.CONFIG_PATH!;
+const config = JSON.parse(fs.readFileSync(ConfigPath, 'utf-8'));
+const Address = config.address;
+const Mnemonic = config.mnemonic;
+const rules = config.rules;
 const USDCAssetId = 0;
 const USDCDenom = 'ibc/8E27BA2D5493AF5636760E354E46004562C46AB7EC0CC4C1CA14E9E20E2545B5';
 
@@ -37,8 +39,7 @@ async function getMainBalance(address: string, denom: string) {
   return (balance ? parseInt(balance.amount, 10) : 0) / 1e6;
 }
 
-async function transfer(fromId: number, toId: number, amount: number) {
-  log(`Transferring ${amount} USDC from ${fromId} to ${toId}`);
+async function transferSub(fromId: number, toId: number, amount: number) {
   await client.validatorClient.post.transfer(
     getSubaccountClient(fromId), wallet.address!, toId, USDCAssetId, new Long(amount * 1e6));
 }
@@ -47,40 +48,59 @@ async function withdraw(fromId: number, amount: number) {
   await client.validatorClient.post.withdraw(getSubaccountClient(fromId), USDCAssetId, new Long(amount * 1e6), Address);
 }
 
-async function maintainTradingSub(toId: number) {
-  log(`Checking subaccount ${toId}`);
-  const balance = await getSubBalance(toId);
-  log(`Subaccount ${toId} has balance ${balance}`);
-  if (balance < 500) {
-    log(`Subaccount ${toId} has balance ${balance} < 500, transferring...`);
-    await transfer(FromSubaccountId, toId, 1000);
+async function transfer(fromId: number, toId: number, amount: number) {
+  log(`Transferring ${amount} USDC from ${fromId} to ${toId}`);
+  if (fromId === -1) {
+    throw new Error('Transfer from main is not supported');
   }
-  else if (balance < 1000) {
-    log(`Subaccount ${toId} has balance ${balance} < 1000, transferring...`);
-    await transfer(FromSubaccountId, toId, 500);
+  if (toId === -1) {
+    await withdraw(fromId, amount);
+  }
+  else {
+    await transferSub(fromId, toId, amount);
   }
 }
 
-async function maintainMain() {
-  log(`Checking main account`);
-  const balance = await getMainBalance(Address, USDCDenom);
-  log(`Main account has balance ${balance}`);
-  if (balance < 1) {
-    log(`Main account has balance ${balance} < 1, withdrawing...`);
-    await withdraw(FromSubaccountId, 1);
+async function getBalance(id: number) {
+  if (id === -1) {
+    return await getMainBalance(Address, USDCDenom);
+  }
+  else {
+    return await getSubBalance(id);
+  }
+}
+
+function init() {
+  for (const rule of rules) {
+    if (rule.from === -1) {
+      throw new Error('Transfer from main is not supported');
+    }
+  }
+}
+
+async function _main() {
+  log(`Start checking...`);
+  for (const rule of rules) {
+    const { from, to, when, step, until } = rule;
+    
+    log(`Fetching balance for ${to}`);
+    const balance = await getBalance(to);
+    log(`Balance for ${to}: ${balance}`);
+    if (balance < when) {
+      log(`Balance for ${to} is less than ${when}`);
+      const times = Math.ceil((until - balance) / step);
+      const amount = times * step;
+      await transfer(from, to, amount);
+    }
   }
 }
 
 function main() {
-  log(`Start checking...`);
-  maintainMain().catch(console.error);
-
-  for (const toId of TradingSubIds) {
-    maintainTradingSub(toId).catch(console.error);
-  }
+  _main().catch(console.error);
 }
 
-log(`Start monitoring for subaccounts ${TradingSubIds}`);
+init();
+log(`Start monitoring for subaccounts ${rules.map(r => r.to)}`);
 main();
 setInterval(() => {
   main();
