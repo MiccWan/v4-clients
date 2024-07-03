@@ -53,6 +53,14 @@ async function transfer(fromId: number, toId: number, amount: number) {
   if (fromId === -1) {
     throw new Error('Transfer from main is not supported');
   }
+
+  const fromBalance = await getBalance(fromId);
+  console.log(`From balance: ${fromBalance}`);
+
+  if (fromBalance < amount) {
+    throw new Error(`Insufficient balance in ${fromId}`);
+  }
+
   if (toId === -1) {
     await withdraw(fromId, amount);
   }
