@@ -1,0 +1,27 @@
+{
+  "address": "dydxabcde",
+  "mnemonic": "abcdef",
+  "rules": [
+    {
+      "from": 1,
+      "to": 20,
+      "when": 500,
+      "step": 500,
+      "until": 1000
+    },
+    {
+      "from": 1,
+      "to": 21,
+      "when": 500,
+      "step": 500,
+      "until": 1000
+    },
+    {
+      "from": 1,
+      "to": -1,
+      "when": 0.2,
+      "step": 0.2,
+      "until": 0.8
+    }
+  ]
+}

@@ -24,3 +24,5 @@ npm-debug.log
 
 # IDE
 .idea
+
+config.json
