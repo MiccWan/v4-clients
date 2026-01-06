@@ -6,11 +6,19 @@ import { CompositeClient } from './src/clients/composite-client';
 import { Network, BECH32_PREFIX, } from './src/clients/constants';
 import LocalWallet from './src/clients/modules/local-wallet';
 
+class Rule {
+  from: number;
+  to: number;
+  when: number;
+  step: number;
+  until: number;
+}
+
 const ConfigPath = process.env.CONFIG_PATH!;
 const config = JSON.parse(fs.readFileSync(ConfigPath, 'utf-8'));
 const Address = config.address;
 const Mnemonic = config.mnemonic;
-const rules = config.rules;
+const rules: Rule[] = config.rules;
 const USDCAssetId = 0;
 const USDCDenom = 'ibc/8E27BA2D5493AF5636760E354E46004562C46AB7EC0CC4C1CA14E9E20E2545B5';
 
@@ -20,6 +28,10 @@ const subaccountClients: SubaccountClient[] = [];
 
 function log(...args) {
   console.log(`[${new Date().toLocaleString('sv-SE')}]`, ...args);
+}
+
+function error(...args) {
+  console.error(`[${new Date().toLocaleString('sv-SE')}]`, ...args);
 }
 
 function getSubaccountClient(id: number) {
@@ -55,7 +67,7 @@ async function transfer(fromId: number, toId: number, amount: number) {
   }
 
   const fromBalance = await getBalance(fromId);
-  console.log(`From balance: ${fromBalance}`);
+  log(`From balance: ${fromBalance}USDC`);
 
   if (fromBalance < amount) {
     throw new Error(`Insufficient balance in ${fromId}`);
@@ -79,6 +91,11 @@ async function getBalance(id: number) {
 }
 
 function init() {
+  log(`Balance controller started with ${rules.length} rule(s):`);
+  for (const rule of rules) {
+    log(JSON.stringify(rule));
+  }
+
   for (const rule of rules) {
     if (rule.from === -1) {
       throw new Error('Transfer from main is not supported');
@@ -86,25 +103,26 @@ function init() {
   }
 }
 
-async function _main() {
+async function main() {
   log(`Start checking...`);
   for (const rule of rules) {
-    const { from, to, when, step, until } = rule;
-    
-    log(`Fetching balance for ${to}`);
-    const balance = await getBalance(to);
-    log(`Balance for ${to}: ${balance}`);
-    if (balance < when) {
-      log(`Balance for ${to} is less than ${when}`);
-      const times = Math.ceil((until - balance) / step);
-      const amount = times * step;
-      await transfer(from, to, amount);
+    try {
+      const { from, to, when, step, until } = rule;
+
+      log(`Fetching balance for ${to}`);
+      const balance = await getBalance(to);
+      log(`Balance for ${to}: ${balance}`);
+      if (balance < when) {
+        log(`Balance for ${to} is less than ${when}`);
+        const times = Math.ceil((until - balance) / step);
+        const amount = times * step;
+        await transfer(from, to, amount);
+      }
+    }
+    catch (err) {
+      error(`Failed to check for rule: ${JSON.stringify(rule)}.\nError message: ${err.message}`);
     }
   }
-}
-
-function main() {
-  _main().catch(console.error);
 }
 
 init();
